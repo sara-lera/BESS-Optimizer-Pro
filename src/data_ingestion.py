@@ -129,12 +129,22 @@ def fetch_mercado_trinidad(start_date: str, end_date: str) -> pd.DataFrame:
             df_dem = df_dem[~df_dem.index.duplicated(keep='first')]
             df_master = df_master.join(df_dem, how='outer')
     
-    # Rellenar nulos con 0 para tecnologías que no generaron, y hacer el resample a 15 min
-    df_master = df_master.fillna(0)
-    print("Interpolando huecos y pasando a 15 minutos...")
-    df_master = df_master.resample('15min').interpolate(method='linear')
+    print("Alineando a frecuencia Horaria Continua...")
+    # Precios (de 15min -> Promedio 1H)
+    pcols = ['precio_mwh']
+    df_p = df_master[pcols].resample('1h').mean()
     
-    return df_master
+    # Demanda (ya viene en 1H)
+    dcols = list(dict_demanda.keys())
+    df_d = df_master[dcols].resample('1h').first()
+    
+    # Generacion (Viene 1 vez al día a las 00:00 como Total de Energía)
+    # Rellenamos el mes y dividimos entre 24 para obtener Potencia horaria media
+    gcols = [c for c in df_master.columns if c not in pcols + dcols]
+    df_g = df_master[gcols].resample('1h').ffill() / 24.0
+    
+    df_final = df_p.join(df_d, how='outer').join(df_g, how='outer').fillna(0)
+    return df_final
 
 if __name__ == "__main__":
     # Descargamos los primeros 10 días de 2026 (intervalos de 15 min nativos para precios)

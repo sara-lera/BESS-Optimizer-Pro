@@ -19,7 +19,7 @@ def main():
     
     # VARIMA modela conjuntamente multiples variables endogenas.
     # Elegimos precio y demanda
-    target_cols = ['precio_mwh', 'demanda_real']
+    target_cols = ['precio_mwh', 'demanda']
     
     n_test = 96 * 2 # 2 dias
     train = df.iloc[:-n_test][target_cols]

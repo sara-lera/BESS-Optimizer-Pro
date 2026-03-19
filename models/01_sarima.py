@@ -25,8 +25,8 @@ def main():
     print(f"Train size: {len(train)}, Test size: {len(test)}")
     
     # Exogenous variables: la demanda
-    exog_train = train[['demanda_real']]
-    exog_test = test[['demanda_real']]
+    exog_train = train[['demanda']]
+    exog_test = test[['demanda']]
     
     print("Ajustando SARIMA(1,1,1)...")
     # Nota: Si añades estacionalidad (ej. seasonal_order=(1,0,1,96)),

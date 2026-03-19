@@ -45,7 +45,7 @@ def main():
     
     # Feature scaling (Vital para Redes Neuronales) 
     # Usamos Precio (target) y Demanda (exog)
-    features = ['precio_mwh', 'demanda_real']
+    features = ['precio_mwh', 'demanda']
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(df[features])
     
