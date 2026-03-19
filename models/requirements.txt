@@ -1,0 +1,10 @@
+# Librerias requeridas para correr los scripts de la carpeta models
+pandas
+numpy
+matplotlib
+scikit-learn
+statsmodels
+xgboost
+torch
+streamlit
+plotly
