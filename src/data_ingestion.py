@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 import os
 
-def fetch_mercado_trinidad(start_date: str, end_date: str) -> pd.DataFrame:
+def fetch_mercado_trinidad(start_date: str, end_date: str, progress_callback=None) -> pd.DataFrame:
     # Los 3 endpoints clave
     url_precios = "https://apidatos.ree.es/es/datos/mercados/precios-mercados-tiempo-real"
     url_generacion = "https://apidatos.ree.es/es/datos/generacion/estructura-generacion"
@@ -25,7 +25,10 @@ def fetch_mercado_trinidad(start_date: str, end_date: str) -> pd.DataFrame:
     
     print(f"Arrancando extracción TOTAL (Precio -> Generación -> Demanda) desde {start_date} a {end_date}...")
     
-    for fecha in fechas:
+    for i, fecha in enumerate(fechas):
+        if progress_callback:
+            progress_callback(int((i / len(fechas)) * 90), f"Descargando día {i+1} de {len(fechas)} ({fecha.strftime('%Y-%m-%d')})...")
+            
         dia_str = fecha.strftime('%Y-%m-%d')
         print(f"-> Procesando día: {dia_str}")
         
@@ -49,7 +52,7 @@ def fetch_mercado_trinidad(start_date: str, end_date: str) -> pd.DataFrame:
             try:
                 df_p = pd.DataFrame(res_precio.json()['included'][0]['attributes']['values'])
                 df_p = df_p[['datetime', 'value']].rename(columns={'value': 'precio_mwh'})
-                df_p['datetime'] = pd.to_datetime(df_p['datetime'], utc=True)
+                df_p['datetime'] = pd.to_datetime(df_p['datetime'], utc=True).dt.tz_convert('Europe/Madrid').dt.tz_localize(None)
                 df_p.set_index('datetime', inplace=True)
                 datos_precios.append(df_p)
             except Exception as e: 
@@ -61,6 +64,8 @@ def fetch_mercado_trinidad(start_date: str, end_date: str) -> pd.DataFrame:
         
         # 2. GENERACIÓN
         params_gen = params_geo.copy()
+        # OBLIGATORIO: REE API devuelve error 500 para estructura-generacion con time_trunc=hour
+        # Por lo tanto, forzamos time_trunc='day' y luego en el resample dividimos entre 24 para aplanarlo.
         params_gen["time_trunc"] = "day"
         res_gen = session.get(url_generacion, params=params_gen)
         if res_gen.status_code == 200:
@@ -71,7 +76,7 @@ def fetch_mercado_trinidad(start_date: str, end_date: str) -> pd.DataFrame:
                     
                     df_g = pd.DataFrame(tech['attributes']['values'])[['datetime', 'value']]
                     df_g = df_g.rename(columns={'value': col_name})
-                    df_g['datetime'] = pd.to_datetime(df_g['datetime'], utc=True)
+                    df_g['datetime'] = pd.to_datetime(df_g['datetime'], utc=True).dt.tz_convert('Europe/Madrid').dt.tz_localize(None)
                     df_g.set_index('datetime', inplace=True)
                     
                     if col_name not in dict_generacion:
@@ -95,7 +100,7 @@ def fetch_mercado_trinidad(start_date: str, end_date: str) -> pd.DataFrame:
                     
                     df_d = pd.DataFrame(dem['attributes']['values'])[['datetime', 'value']]
                     df_d = df_d.rename(columns={'value': col_name})
-                    df_d['datetime'] = pd.to_datetime(df_d['datetime'], utc=True)
+                    df_d['datetime'] = pd.to_datetime(df_d['datetime'], utc=True).dt.tz_convert('Europe/Madrid').dt.tz_localize(None)
                     df_d.set_index('datetime', inplace=True)
                     
                     if col_name not in dict_demanda:
@@ -110,6 +115,9 @@ def fetch_mercado_trinidad(start_date: str, end_date: str) -> pd.DataFrame:
         
     if not datos_precios:
         raise Exception("Fallo total: No se ha podido descargar el core (precios).")
+        
+    if progress_callback:
+        progress_callback(90, "Ensamblando datos y cruzando tablas...")
         
     # Ensamblaje del monstruo
     df_master = pd.concat(datos_precios)
@@ -139,11 +147,34 @@ def fetch_mercado_trinidad(start_date: str, end_date: str) -> pd.DataFrame:
     df_d = df_master[dcols].resample('1h').first()
     
     # Generacion (Viene 1 vez al día a las 00:00 como Total de Energía)
-    # Rellenamos el mes y dividimos entre 24 para obtener Potencia horaria media
+    # 1. Agrupamos por día para asegurar 1 solo registro (Total) por día válido
     gcols = [c for c in df_master.columns if c not in pcols + dcols]
-    df_g = df_master[gcols].resample('1h').ffill() / 24.0
+    df_g = df_master[gcols].dropna(how='all').resample('1D').first()
     
-    df_final = df_p.join(df_d, how='outer').join(df_g, how='outer').fillna(0)
+    # 2. Reindexamos a horario extendiendo el total diario a todas las horas de ese día
+    df_g_hourly = df_g.reindex(df_p.index).ffill()
+    
+    # 3. Calculamos la demanda total diaria para generar un "perfil de pesos horarios" exacto
+    # Esto distribuye la generación matemáticamente siguiendo la curva de carga real, evitando el flat-line
+    df_d_daily_sum = df_d.resample('1D').sum().reindex(df_p.index).ffill()
+    
+    col_demanda = 'demanda' if 'demanda' in df_d.columns else dcols[0] if dcols else None
+    
+    if col_demanda:
+        # Peso de cada hora = (demanda de la hora) / (demanda total del día)
+        pesos_horarios = df_d[col_demanda] / df_d_daily_sum[col_demanda]
+        pesos_horarios = pesos_horarios.fillna(1.0/24.0) # Seguro
+        
+        for c in gcols:
+            df_g_hourly[c] = df_g_hourly[c] * pesos_horarios
+    else:
+        df_g_hourly = df_g_hourly / 24.0 # Fallback extremo
+    
+    df_final = df_p.join(df_d, how='outer').join(df_g_hourly, how='outer').fillna(0)
+    
+    if progress_callback:
+        progress_callback(100, "¡Proceso de datos finalizado!")
+        
     return df_final
 
 if __name__ == "__main__":
