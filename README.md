@@ -10,9 +10,6 @@
     <a href="#-models">Models</a> •
     <a href="#-license">License</a>
   </p>
-  <p align="center">
-    <img src="https://upload.wikimedia.org/wikipedia/commons/e/ed/Red_El%C3%A9ctrica_logo_2022.svg" alt="Redeia Logo" width="200">
-  </p>
 </p>
 
 ---
