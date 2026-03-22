@@ -10,16 +10,13 @@
     <a href="#-models">Models</a> •
     <a href="#-license">License</a>
   </p>
-  <p align="center">
-    <img src="https://upload.wikimedia.org/wikipedia/commons/e/ed/Red_El%C3%A9ctrica_logo_2022.svg" alt="Redeia Logo" width="200">
-  </p>
 </p>
 
 ---
 
 ## 📋 Overview
 
-**Eco-Optimizer BESS** is an interactive Streamlit dashboard that connects the full pipeline from **real-time electricity market data ingestion** (Red Eléctrica de España (Actual Redeia) API) through **multi-model time series forecasting** to **optimal battery arbitrage scheduling** using Linear Programming.
+**BESS Optimizer-Pro** is an interactive Streamlit dashboard that connects the full pipeline from **real-time electricity market data ingestion** (Red Eléctrica de España (now Redeia) API) through **multi-model time series forecasting** to **optimal battery arbitrage scheduling** using Linear Programming.
 
 Built as part of an MSc Data Science Time Series project, it demonstrates how a Battery Energy Storage System (BESS) can maximize arbitrage profit by buying electricity when prices are low and selling when prices are high — all driven by AI-powered price predictions.
 
